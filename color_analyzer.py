@@ -3,6 +3,7 @@ from PIL import Image
 import numpy
 from sklearn.cluster import KMeans
 import os
+import time
 from dotenv import load_dotenv
 from google import genai
 
@@ -82,19 +83,32 @@ if uploaded_file is not None:
                     "API Key is missing! Please check your .env file.")
             else:
                 with streamlit.spinner("Asking Google Gemini for design insights..."):
-                    try:
-                        # Prepare the prompt to ask the AI
-                        palette_string = ", ".join(extracted_hex_codes)
-                        prompt = f"Act as an expert designer. Analyze this color palette: {palette_string}. 1. Psychological Mood: Explain in maximum 2 sentences. 2. Perfect Fits: Provide exactly 3 short bullet points (one for Brand Identity, one for Website, one for Interior). Keep the entire response extremely concise, punchy, and easy to read at a glance."
-                        # Call the NEW Gemini AI model explicitly and get the response
-                        response = client.models.generate_content(
-                            model='gemini-2.5-flash',
-                            contents=prompt,
-                        )
+                    # Prepare the prompt to ask the AI
+                    palette_string = ", ".join(extracted_hex_codes)
+                    prompt = f"Act as an expert designer. Analyze this color palette: {palette_string}. 1. Psychological Mood: Explain in maximum 2 sentences. 2. Perfect Fits: Provide exactly 3 short bullet points (one for Brand Identity, one for Website, one for Interior). Keep the entire response extremely concise, punchy, and easy to read at a glance."
 
-                        # Display the AI's response on the screen
-                        streamlit.write(response.text)
+                    # --- YENİ EKLENEN RETRY (YENİDEN DENEME) MANTIĞI ---
+                    retries = 3
+                    for i in range(retries):
+                        try:
+                            # Call the NEW Gemini AI model explicitly and get the response
+                            response = client.models.generate_content(
+                                model='gemini-2.5-flash',
+                                contents=prompt,
+                            )
 
-                    except Exception as e:
-                        streamlit.error(
-                            f"An error occurred while talking to AI: {e}")
+                            # Display the AI's response on the screen
+                            streamlit.write(response.text)
+
+                            # BAŞARILI OLURSA DÖNGÜDEN ÇIK! (Gereksiz yere 3 kez çalışmasını engeller)
+                            break
+
+                        except Exception as e:
+                            # Eğer hata alırsak ve hala deneme hakkımız varsa:
+                            if i < retries - 1:
+                                time.sleep(2)  # 2 saniye bekle
+                                continue       # Döngünün başına dön ve tekrar dene
+                            # Eğer 3 hakkımızı da doldurduysak ve hala hata varsa:
+                            else:
+                                streamlit.error(
+                                    f"Google Gemini servisi şu an yoğunluktan dolayı yanıt veremiyor. (Hata Detayı: {e})")
